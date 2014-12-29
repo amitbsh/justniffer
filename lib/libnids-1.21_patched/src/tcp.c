@@ -708,6 +708,11 @@ void ip_to_str (char* buffer,struct in_addr* addr)
 
 void tcp_flags(char* buffer, int flag);
 
+/* the tcp traffic counters are used in libnids.c for reporting the
+   tcp traffic volume */
+unsigned long long tcp_total_payload = 0;
+unsigned long long tcp_total_hdrs = 0;
+
 void
 process_tcp(u_char * data, int skblen, struct timeval* ts)
 {
@@ -738,6 +743,9 @@ process_tcp(u_char * data, int skblen, struct timeval* ts)
   //printf("datalen=%d ", datalen);
   tcp_flags(buffer , this_tcphdr->th_flags);
   //printf("flags=%s ",buffer);
+  
+  tcp_total_payload += datalen;
+  tcp_total_hdrs += iplen - datalen;
   
   if (datalen < 0) {
     nids_params.syslog(NIDS_WARN_TCP, NIDS_WARN_TCP_HDR, this_iphdr,
