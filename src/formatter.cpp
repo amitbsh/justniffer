@@ -547,6 +547,16 @@ void outstream_printer::doit(handlers::iterator start, handlers::iterator end,co
 	fflush(stdout);
 }
 
+void socket_printer::doit(handlers::iterator start, handlers::iterator end,const timeval*t)
+{
+    for (handlers::iterator i= start; i!= end; i++)
+		(*i)->append(_fd, t);
+	//	_out<<_eol<<std::flush;  flush fd here
+	//_out.sync();   sync fd here
+	//	fflush(stdout);
+	fsync(_fd);
+}
+
 ///// stream /////
 
 int stream::id = 0;
@@ -691,6 +701,12 @@ void close_originator::append(std::basic_ostream<char>& out, const timeval* t)
 	else
 		out <<_not_found;
 	
+}
+
+void close_originator::append(int fd, const timeval* t)
+{
+	//amit- not implemented
+	printf("not implemented");
 }
 
 void close_originator::onClose(tcp_stream* pstream, const timeval* t, unsigned char* packet)

@@ -25,6 +25,9 @@
 #include <nids2.h>
 #include "formatter.h"
 #include "utilities.h"
+#include <sys/socket.h>
+#include <errno.h>
+#include <sys/un.h>
 
 using namespace std;
 namespace po = boost::program_options;
@@ -82,6 +85,7 @@ const char* handle_truncated_cmd = "truncated";
 const char* raw_cmd = "raw";
 const char* not_found_string = "not-found";
 const char* execute_cmd = "execute";
+const char* socket_cmd = "socket";
 const char* new_line_cmd = "new-line";
 const char* default_packet_filter = "";
 const char* default_format = "%source.ip - - [%request.timestamp(%d/%b/%Y:%T %z)] \"%request.line\" %response.code %response.header.content-length(0) \"%request.header.referer()\" \"%request.header.user-agent()\"";
@@ -164,6 +168,7 @@ int main(int argc, char*argv [])
 			(string(config_cmd).append(",c").c_str(), po::value<string>(), "configuration file")
 			(string(user_cmd).append(",U").c_str(), po::value<string>(), string("user to impersonate when executing the command specified by the \"").append(execute_cmd ).append("\" option").c_str())
 			(string(execute_cmd).append(",e").c_str(), po::value<string>(), "execute the specified command every request/response phase")
+			(string(socket_cmd).append(",S").c_str(), po::value<string>(), "output to socket every request/response phase")
 			(string(packet_filter_cmd).append(",p").c_str(), po::value<string>(), "packet filter (tcpdump filter syntax)")
 			(string(uprintable_cmd).append(",u").c_str(), "encode as dots (.) unprintable characters")
 			(string(handle_truncated_cmd).append(",t").c_str(), "handle truncated streams (not correctly closed)")
@@ -275,6 +280,7 @@ int main(int argc, char*argv [])
 		}
 		
 		po::variable_value execute_cmd_arg = vm[execute_cmd];
+		po::variable_value socket_cmd_arg = vm[socket_cmd];
 		po::variable_value new_line_arg = vm[new_line_cmd];
         
         string unew_line_arg = boost::to_upper_copy(new_line_arg.as<string>());
@@ -286,16 +292,36 @@ int main(int argc, char*argv [])
         string new_line=_new_line_map[unew_line_arg];
         if (vm.count(python_cmd))
             new_line="";
+		if (!execute_cmd_arg.empty() && !socket_cmd_arg.empty()) {
+			print_error("you cannot simultaneously specify output to executable and socket\n");
+			return -1;
+		}
 		printer::ptr _printer;
-		if (execute_cmd_arg.empty())
-			_printer = printer::ptr(new outstream_printer(out, new_line));
-		else
-		{
+		int socket_fd = -1;
+		if (!socket_cmd_arg.empty()) {//to socket
+			const char *socket_name = socket_cmd_arg.as<string>().c_str();
+			struct sockaddr_un name;
+			//create the socket
+			socket_fd = socket(PF_LOCAL, SOCK_STREAM, 0);
+			//store the server’s name in the socket address
+			name.sun_family = AF_LOCAL;
+			strcpy(name.sun_path, socket_name);
+			//connect the socket
+			int err = connect(socket_fd, (struct sockaddr*)&name, SUN_LEN(&name));
+			if (err) {
+				print_error("error connecting to ") << socket_name << " err " << errno << "\n";
+				return -1;
+			}
+			//connected successfuly
+			_printer = printer::ptr(new socket_printer(socket_fd, new_line));
+		} else if (!execute_cmd_arg.empty()) {//to executable
 			po::variable_value user_arg = vm[user_cmd];
 			if (!user_arg.empty())
 				_printer = printer::ptr(new cmd_execute_printer(execute_cmd_arg.as<string>(), user_arg.as<string>()));
 			else
 				_printer = printer::ptr(new cmd_execute_printer(execute_cmd_arg.as<string>()));
+		} else {//to stdout
+			_printer = printer::ptr(new outstream_printer(out, new_line));
 		}
 		p.set_printer(_printer.get());
         
@@ -350,6 +376,10 @@ int main(int argc, char*argv [])
 
 		nids_register_chksum_ctl(chksumctl, 1);
 		nids_run();
+
+		if (socket_fd != -1)
+			close(socket_fd);
+
 		// reached when parsing file
 		exit(0);
 

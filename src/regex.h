@@ -47,6 +47,7 @@ class regex_handler_base: public basic_handler
 public:
 	regex_handler_base() {}
 	virtual void append(std::basic_ostream<char>& out, const timeval* );
+	virtual void append(int fd, const timeval* );
 
 protected:
 	virtual string& get_text() = 0;
