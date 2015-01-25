@@ -67,6 +67,30 @@ static void null_syslog(int type, int errnum, struct ip *iph, void *data)
 {  
 }
 
+struct tcp_port_filter_t *create_tcp_port_filter(char *tcp_port_filter_string) {
+	struct tcp_port_filter_t *filter;
+	const char* tok;
+	int i;
+
+	do {
+		filter = (struct tcp_port_filter_t *)malloc(sizeof(struct tcp_port_filter_t));
+		if (!filter)
+			break;
+		memset(filter, 0, sizeof(tcp_port_filter_t));
+		for (tok = strtok(tcp_port_filter_string, ","); tok && *tok; tok = strtok(NULL, ",")) {
+			if (filter->len >= PORT_FILTER_MAX) {
+				print_warning("more than ")<<PORT_FILTER_MAX<<" filters are defined, ignoring the rest\n";
+				break;
+			}
+			filter->ports[filter->len] = atoi(tok);
+			filter->len += 1;
+		}
+		/*		for (i = 0; i < filter->len; i++)
+				printf("%d> %d\n", i + 1, filter->ports[i]);*/
+	} while (0);
+    return filter;
+}
+
 const char* help_cmd = "help";
 const char* filecap_cmd = "filecap";
 const char* interface_cmd = "interface";
@@ -86,6 +110,7 @@ const char* raw_cmd = "raw";
 const char* not_found_string = "not-found";
 const char* execute_cmd = "execute";
 const char* socket_cmd = "socket";
+const char* tcp_port_filter_cmd = "tcp-port-filter";
 const char* new_line_cmd = "new-line";
 const char* default_packet_filter = "";
 const char* default_format = "%source.ip - - [%request.timestamp(%d/%b/%Y:%T %z)] \"%request.line\" %response.code %response.header.content-length(0) \"%request.header.referer()\" \"%request.header.user-agent()\"";
@@ -169,6 +194,7 @@ int main(int argc, char*argv [])
 			(string(user_cmd).append(",U").c_str(), po::value<string>(), string("user to impersonate when executing the command specified by the \"").append(execute_cmd ).append("\" option").c_str())
 			(string(execute_cmd).append(",e").c_str(), po::value<string>(), "execute the specified command every request/response phase")
 			(string(socket_cmd).append(",S").c_str(), po::value<string>(), "output to socket every request/response phase")
+			(string(tcp_port_filter_cmd).append(",z").c_str(), po::value<string>(), "process tcp streams to/ from specific ports (comma separated values).\nup to 10 ports")
 			(string(packet_filter_cmd).append(",p").c_str(), po::value<string>(), "packet filter (tcpdump filter syntax)")
 			(string(uprintable_cmd).append(",u").c_str(), "encode as dots (.) unprintable characters")
 			(string(handle_truncated_cmd).append(",t").c_str(), "handle truncated streams (not correctly closed)")
@@ -273,6 +299,23 @@ int main(int argc, char*argv [])
         nids_params.n_hosts= max_fragmented_ip_hosts_v;
 		// we don want to log intrusions
 		nids_params.syslog =reinterpret_cast<void (*)()>(null_syslog);
+
+		//build the tcp port filtering structure
+		po::variable_value tcp_port_filter_cmd_arg = vm[tcp_port_filter_cmd];
+		string tcp_port_filter_string;
+		if (tcp_port_filter_cmd_arg.empty())
+			print_warning("no tcp port filter is defined, processing all tcp traffic\n");
+		else
+		{
+			tcp_port_filter_string = vm[tcp_port_filter_cmd].as<string>();
+			tcp_port_filter_t *tcp_port_filter = create_tcp_port_filter((char*)tcp_port_filter_string.c_str());
+			if (!tcp_port_filter) {
+				print_error("cant create tcp port filters")<<"\n";
+				return -1;
+			}
+			nids_params.tcp_port_filter = tcp_port_filter;
+		}
+
 		if (!nids_init())
 		{
 			print_error(nids_errbuf)<<"\n";

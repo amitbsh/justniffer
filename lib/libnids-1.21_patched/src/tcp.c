@@ -728,6 +728,32 @@ process_tcp(u_char * data, int skblen, struct timeval* ts)
   ugly_iphdr = this_iphdr;
   iplen = ntohs(this_iphdr->ip_len);
   ip_to_str(buffer, &this_iphdr->ip_src);
+
+  datalen = iplen - 4 * this_iphdr->ip_hl - 4 * this_tcphdr->th_off;
+
+  /* update the tcp traffic counters */
+  tcp_total_payload += datalen;
+  tcp_total_hdrs += iplen - datalen;
+
+  /*
+   * apply tcp_port_filter
+   */
+  if (nids_params.tcp_port_filter) {
+	  int i;
+	  struct tuple4 addr;
+	  addr.source = ntohs(this_tcphdr->th_sport);
+	  addr.dest = ntohs(this_tcphdr->th_dport);
+	  //addr.saddr = this_iphdr->ip_src.s_addr;
+	  //addr.daddr = this_iphdr->ip_dst.s_addr;
+	  for (i = 0; i < nids_params.tcp_port_filter->len; i++)
+		  if ((addr.source == nids_params.tcp_port_filter->ports[i]) ||
+			  (addr.dest == nids_params.tcp_port_filter->ports[i]))
+			  break;
+	  if (i == nids_params.tcp_port_filter->len)
+		  return;
+
+	  //printf("processing %x:%d %x:%d\n", addr.saddr, addr.source, addr.daddr, addr.dest);
+  }
   
   //printf("iplen=%d ip_src=%s src_port=%d ", iplen, buffer, ntohs(this_tcphdr->th_sport));
   ip_to_str(buffer, &this_iphdr->ip_dst);
@@ -739,14 +765,10 @@ process_tcp(u_char * data, int skblen, struct timeval* ts)
     return;
   } // ktos sie bawi
   
-  datalen = iplen - 4 * this_iphdr->ip_hl - 4 * this_tcphdr->th_off;
   //printf("datalen=%d ", datalen);
   tcp_flags(buffer , this_tcphdr->th_flags);
   //printf("flags=%s ",buffer);
-  
-  tcp_total_payload += datalen;
-  tcp_total_hdrs += iplen - datalen;
-  
+
   if (datalen < 0) {
     nids_params.syslog(NIDS_WARN_TCP, NIDS_WARN_TCP_HDR, this_iphdr,
 		       this_tcphdr);

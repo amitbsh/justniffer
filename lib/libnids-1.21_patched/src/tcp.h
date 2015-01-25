@@ -21,6 +21,12 @@ struct skbuff {
   u_int ack;
 };
 
+#define PORT_FILTER_MAX 10
+struct tcp_port_filter_t {
+	int len;
+	unsigned int ports[PORT_FILTER_MAX];
+};
+
 int tcp_init(int);
 void tcp_exit(void);
 void process_tcp(u_char *, int, struct timeval* );

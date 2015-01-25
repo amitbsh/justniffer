@@ -12,6 +12,7 @@
 # include <netinet/ip.h>
 # include <netinet/tcp.h>
 # include <pcap.h>
+#include "tcp.h"
 
 # ifdef __cplusplus
 extern "C" {
@@ -112,6 +113,7 @@ struct tcp_stream
 
 struct nids_prm
 {
+  struct tcp_port_filter_t *tcp_port_filter;
   int n_tcp_streams;
   int n_hosts;
   char *device;

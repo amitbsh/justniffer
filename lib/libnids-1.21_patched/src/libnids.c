@@ -91,6 +91,7 @@ char *nids_warnings[] = {
 };
 
 struct nids_prm nids_params = {
+	NULL,           /* tcp_port_filter */
     1040,			/* n_tcp_streams */
     256,			/* n_hosts */
     NULL,			/* device */
