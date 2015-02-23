@@ -486,13 +486,22 @@ static void *volume_thread_fn(void* arg) {
 		printf("instance_id=%lu\n", instance_id);
 		printf("starting loop\n");
 		while (1) {
+			/*
+			 * note that some bytes might be lost in the count since the counters
+			 * are not mutual excluded and a race condition may occur.
+			 */
 			sprintf(msg, "\n%lu (total)--> total=%llu\n", instance_id, total_bytes);
+			total_bytes = 0;
 			write(fd, msg, strlen(msg));
 
 			sprintf(msg, "\n%lu (tcp)--> h=%llu p=%llu\n", instance_id, tcp_total_hdrs, tcp_total_payload);
+			tcp_total_hdrs = 0;
+			tcp_total_payload = 0;
 			write(fd, msg, strlen(msg));
 
 			sprintf(msg, "\n%lu (udp)--> h=%llu p=%llu\n", instance_id, udp_total_hdrs, udp_total_payload);
+			udp_total_hdrs = 0;
+			udp_total_payload = 0;
 			write(fd, msg, strlen(msg));
 
 			sleep(5);
