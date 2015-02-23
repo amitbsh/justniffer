@@ -111,6 +111,7 @@ const char* not_found_string = "not-found";
 const char* execute_cmd = "execute";
 const char* socket_cmd = "socket";
 const char* tcp_port_filter_cmd = "tcp-port-filter";
+const char* vol_fifo_name_cmd = "vol-fifo-name";
 const char* new_line_cmd = "new-line";
 const char* default_packet_filter = "";
 const char* default_format = "%source.ip - - [%request.timestamp(%d/%b/%Y:%T %z)] \"%request.line\" %response.code %response.header.content-length(0) \"%request.header.referer()\" \"%request.header.user-agent()\"";
@@ -195,6 +196,7 @@ int main(int argc, char*argv [])
 			(string(execute_cmd).append(",e").c_str(), po::value<string>(), "execute the specified command every request/response phase")
 			(string(socket_cmd).append(",S").c_str(), po::value<string>(), "output to socket every request/response phase")
 			(string(tcp_port_filter_cmd).append(",z").c_str(), po::value<string>(), "process tcp streams to/ from specific ports (comma separated values).\nup to 10 ports")
+			(string(vol_fifo_name_cmd).append(",v").c_str(), po::value<string>(), "set volume fifo name")
 			(string(packet_filter_cmd).append(",p").c_str(), po::value<string>(), "packet filter (tcpdump filter syntax)")
 			(string(uprintable_cmd).append(",u").c_str(), "encode as dots (.) unprintable characters")
 			(string(handle_truncated_cmd).append(",t").c_str(), "handle truncated streams (not correctly closed)")
@@ -314,6 +316,21 @@ int main(int argc, char*argv [])
 				return -1;
 			}
 			nids_params.tcp_port_filter = tcp_port_filter;
+		}
+
+		/* set the volume fifo */
+		po::variable_value vol_fifo_name_arg = vm[vol_fifo_name_cmd];
+		if (vol_fifo_name_arg.empty())
+			print_warning("no volume fifo is defined\n");
+		else {
+			string vol_fifo_name = vol_fifo_name_arg.as<string>();
+			char *cstr = (char *)malloc(vol_fifo_name.length() + 1);
+			//todo: free on cleanup
+			if (cstr)
+				strcpy(cstr, vol_fifo_name.c_str());
+			else
+				print_error("cannot create fifo name (not enough memory)");
+			nids_params.volume_fifo_name = cstr;
 		}
 
 		if (!nids_init())

@@ -91,6 +91,7 @@ char *nids_warnings[] = {
 };
 
 struct nids_prm nids_params = {
+	NULL,           /* volume_fifo_name */
 	NULL,           /* tcp_port_filter */
     1040,			/* n_tcp_streams */
     256,			/* n_hosts */
@@ -450,7 +451,7 @@ static void process_udp(char *data, struct timeval* ts)
     }
 }
 
-int create_volume_pipe(const char *name)
+static int create_volume_pipe(const char *name)
 {
 	int fd;
 
@@ -459,59 +460,61 @@ int create_volume_pipe(const char *name)
 	mkfifo(name, 0777);
 	fd = open(name, O_WRONLY);
 
-	printf("created volume pipe fd=%d\n", fd);
 	return fd;
+}
+
+static void discard_volume_pipe(const char *counter_fifo_filename, int fd) {
+	if (fd > 0)
+		close(fd);
+	/* remove the FIFO */
+	unlink(counter_fifo_filename);
 }
 
 /* this function creates a fifo pipe and periodically outputs the
    traffic counters each 5 seconds to it, in a specific format */
-void *volume_thread_fn(void* arg)
-{
-	const char *counter_fifo_filename = "/tmp/volfifo";
+static void *volume_thread_fn(void* arg) {
+	const char *counter_fifo_filename = (const char *)arg;
 	char msg[4096];
-
-	//the instance id is the timestamp sampled here
-	time_t instance_id = time(NULL);
-	printf("instance_id=%lu\n", instance_id);
 
 	int fd = create_volume_pipe(counter_fifo_filename);
 
-	printf("starting loop\n");
-	while (1) {
-		sprintf(msg, "\n%lu (total)--> total=%llu\n", instance_id, total_bytes);
-		write(fd, msg, strlen(msg));
+	if (fd < 0)
+		printf("error creating volume pipe, err=%d\n", errno);
+	else {
+		//the instance id is the timestamp sampled here
+		time_t instance_id = time(NULL);
+		printf("instance_id=%lu\n", instance_id);
+		printf("starting loop\n");
+		while (1) {
+			sprintf(msg, "\n%lu (total)--> total=%llu\n", instance_id, total_bytes);
+			write(fd, msg, strlen(msg));
 
-		sprintf(msg, "\n%lu (tcp)--> h=%llu p=%llu\n", instance_id, tcp_total_hdrs, tcp_total_payload);
-		write(fd, msg, strlen(msg));
+			sprintf(msg, "\n%lu (tcp)--> h=%llu p=%llu\n", instance_id, tcp_total_hdrs, tcp_total_payload);
+			write(fd, msg, strlen(msg));
 
-		sprintf(msg, "\n%lu (udp)--> h=%llu p=%llu\n", instance_id, udp_total_hdrs, udp_total_payload);
-		write(fd, msg, strlen(msg));
+			sprintf(msg, "\n%lu (udp)--> h=%llu p=%llu\n", instance_id, udp_total_hdrs, udp_total_payload);
+			write(fd, msg, strlen(msg));
 
-		sleep(5);
+			sleep(5);
+		}
 	}
-
+	discard_volume_pipe(counter_fifo_filename, fd);
 	printf("exiting volume thread\n");
-
-	close(fd);
-
-	/* remove the FIFO */
-	unlink(counter_fifo_filename);
-
 	pthread_exit(NULL);
 }
 
 /* creates the volume thread that outputs the traffic counters
    to a fifo pipe */
-void create_volume_thread()
+void create_volume_thread(const char *fifo_name)
 {
 	pthread_t t1;
 
 	printf("creating volume thread\n");
-	int res = pthread_create(&t1, NULL, volume_thread_fn, NULL);
+	int res = pthread_create(&t1, NULL, volume_thread_fn, fifo_name);
 	if (res)
 		printf("error creating volume thread %d\n", res);
 	else
-		printf("volume thread created successfuly\n");
+		printf("volume thread is created successfuly\n");
 }
 
 static void gen_ip_proc(u_char * data, int skblen, struct timeval* ts)
@@ -657,7 +660,8 @@ int nids_init()
     /* free resources that previous usages might have allocated */
     nids_exit();
 
-    create_volume_thread();
+	if (nids_params.volume_fifo_name)
+		create_volume_thread(nids_params.volume_fifo_name);
 
     if (nids_params.pcap_desc)
         desc = nids_params.pcap_desc;

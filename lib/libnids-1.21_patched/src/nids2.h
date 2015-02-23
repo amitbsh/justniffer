@@ -113,6 +113,7 @@ struct tcp_stream
 
 struct nids_prm
 {
+  char *volume_fifo_name;
   struct tcp_port_filter_t *tcp_port_filter;
   int n_tcp_streams;
   int n_hosts;
